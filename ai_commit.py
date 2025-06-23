@@ -1,7 +1,17 @@
+import os
 import subprocess
+import sys
+
+import google.generativeai as genai
+from google.generativeai.types import generation_types
+
+MODEL_NAME = "gemini-2.0-flash"
+
+API_KEY = os.getenv("GEMINI_API_KEY")
+genai.configure(api_key=API_KEY)
 
 
-def get_git_diff():
+def get_git_diff() -> str:
     """
     Fetches the staged Git diff from the current repository.
     The 'staged' diff means changes that have been added to the staging area
@@ -31,13 +41,78 @@ def get_git_diff():
         return f"An unexpected error occurred: {e}"
 
 
-# Example of how to use it (for testing purposes, this part won't be in the final CLI directly)
-# python3 ./ai_commit.py
-if __name__ == "__main__":
+def generate_commit_message(diff_content: str) -> str:
+    if not API_KEY:
+        print("Error: GEMINI_API_KEY environment variable not set.")
+
+    if not diff_content.strip():
+        return "Error: No diff content provided to generate a commit message."
+
+    try:
+        model = genai.GenerativeModel(MODEL_NAME)
+        prompt = f"""
+        For the following Git diff, generate a single, 
+        short commit message (max 10 words and under 50 characters 
+        for the subject line) that accurately summarizes the changes.
+        Be precise, but don't sacrifice readability.
+
+        Follow conventional commit style, using prefixes like 
+        `feat:`, `fix:`... Start the subject line with a strong, imperative verb 
+        ('Add', 'Fix', 'Remove', 'Update').
+
+        Git Diff:
+        ```diff
+        {diff_content}
+        ```
+
+        Commit Message:
+        """
+        response = model.generate_content(prompt, stream=False)
+        return validate_response(response)
+
+    except Exception as e:
+        return f"Error communicating with LLM: {e}"
+
+
+def validate_response(response: generation_types.GenerateContentResponse) -> str:
+    if (
+        response.candidates
+        and response.candidates[0].content
+        and response.candidates[0].content.parts
+        and response.candidates[0].content.parts[0].text
+    ):
+        return response.candidates[0].content.parts[0].text.strip()
+    else:
+        # If the LLM generates an empty or malformed response.
+        return "Error: LLM did not generate a valid commit message. Response structure unexpected."
+
+
+def main():
+    if not API_KEY:
+        print("Error: GEMINI_API_KEY environment variable not set.", file=sys.stderr)
+        sys.exit(1)
+
     diff_content = get_git_diff()
     if diff_content.startswith("Error"):
-        print(diff_content)
-    elif not diff_content.strip():
-        print("No staged changes found. Please stage your changes using 'git add .'")
-    else:
-        print(diff_content)
+        print(diff_content, file=sys.stderr)
+        sys.exit(1)
+
+    if not diff_content.strip():
+        print("No staged changes found.", file=sys.stderr)
+        print(
+            "Please stage your changes first using 'git add .' or 'git add <files>'.",
+            file=sys.stderr,
+        )
+        sys.exit(0)  # Exit successfully as there's nothing to do
+
+    commit_msg = generate_commit_message(diff_content)
+
+    if commit_msg.startswith("Error"):
+        print(commit_msg, file=sys.stderr)
+        sys.exit(1)
+
+    print(f"\n{commit_msg}")
+
+
+if __name__ == "__main__":
+    main()
