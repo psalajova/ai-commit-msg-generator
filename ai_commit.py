@@ -111,7 +111,7 @@ def main():
         print(commit_msg, file=sys.stderr)
         sys.exit(1)
 
-    print(f"\n{commit_msg}")
+    print(f"{commit_msg}")
 
 
 if __name__ == "__main__":
