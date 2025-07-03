@@ -25,3 +25,9 @@ Set it as GEMINI_API_KEY environment variable:
 $ python /path/to/ai_commit.py
 feat: Add initial dependencies
 ```
+
+For ease of use, you can also set an alias: `alias generate-commit-msg="python /path/to/ai_commit.py"`, to use like:
+```
+$ generate-commit-msg
+feat: Add initial dependencies
+```
